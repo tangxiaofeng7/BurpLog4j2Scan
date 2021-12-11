@@ -13,4 +13,5 @@ BurpLog4j2Scan is a Burp Suite Extension written in JAVA which could be useful a
 
 ### Link
 https://github.com/Maskhe/FastjsonScan
+
 https://github.com/whwlsfb/Log4j2Scan
