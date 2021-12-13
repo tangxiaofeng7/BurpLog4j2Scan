@@ -10,7 +10,6 @@ BurpLog4j2Scan is a Burp Suite Extension written in JAVA which could be useful a
 ![img.png](img/process.png)
 ##### result
 ![img.png](img/result.png)
-
 ### Link
 https://github.com/Maskhe/FastjsonScan
 
